@@ -2,7 +2,6 @@ module github.com/srijithm999/payloadsize
 
 go 1.23
 
-replace github.com/philips-internal/payloadSize => ./payload
 
 require (
 	github.com/caddyserver/caddy/v2 v2.8.4
