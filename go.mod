@@ -1,4 +1,4 @@
-module github.com/philips-internal/payloadSize
+module github.com/srijithm999/payloadsize
 
 go 1.23
 
