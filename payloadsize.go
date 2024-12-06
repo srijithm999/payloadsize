@@ -1,4 +1,4 @@
-package payloadSize
+package payloadsize
 
 import (
 	"fmt"
