@@ -3,14 +3,18 @@ package payloadsize
 import (
 	"fmt"
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 func init() {
-	caddy.RegisterModule(PayloadSize{})
+	caddy.RegisterModule(&PayloadSize{})
+	httpcaddyfile.RegisterHandlerDirective("payloadsize", parseCaddyfile)
 }
 
 type PayloadSize struct {
@@ -18,13 +22,42 @@ type PayloadSize struct {
 	logger         *zap.Logger
 }
 
-func (j PayloadSize) Provision(context caddy.Context) error {
+// UnmarshalCaddyfile Caddyfile syntax:
+//
+//	payloadsize {
+//		max_payload_size <size>
+//	}
+func (j *PayloadSize) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		if d.NextArg() {
+			return d.ArgErr()
+		}
+		for nesting := d.Nesting(); d.NextBlock(nesting); {
+			switch d.Val() {
+			case "max_payload_size":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				j.MaxPayloadSize, _ = strconv.Atoi(d.Val())
+			default:
+				return d.Errf("unrecognized subdirective '%s'", d.Val())
+			}
+		}
+	}
+	return nil
+}
+
+func (j *PayloadSize) Validate() error {
+	return nil
+}
+
+func (j *PayloadSize) Provision(context caddy.Context) error {
 	j.logger = context.Logger()
 	return nil
 }
 
 // CaddyModule returns the Caddy module information
-func (PayloadSize) CaddyModule() caddy.ModuleInfo {
+func (j *PayloadSize) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.payloadsize",
 		New: func() caddy.Module { return new(PayloadSize) },
@@ -33,7 +66,6 @@ func (PayloadSize) CaddyModule() caddy.ModuleInfo {
 
 func (j *PayloadSize) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 
-	j.logger.Info("JWTPayload Serve Http processing request")
 	// Read the body (plaintext payload)
 	body, err := io.ReadAll(r.Body)
 
@@ -42,22 +74,33 @@ func (j *PayloadSize) ServeHTTP(w http.ResponseWriter, r *http.Request, next cad
 	}
 
 	payloadSize := len(body)
-	fmt.Printf("Request body payload size: %d bytes\n", payloadSize)
+	j.logger.Info("recorded payload size", zap.Int("size", payloadSize), zap.String("tenant", "unknown"))
 
 	// Enforce max payload size if specified
 	if j.MaxPayloadSize > 0 && payloadSize > j.MaxPayloadSize {
-		return caddyhttp.Error(http.StatusRequestEntityTooLarge, fmt.Errorf("JWT payload size exceeds maximum allowed size of %d bytes", j.MaxPayloadSize))
+		j.logger.Error("payload size exceeds maximum allowed size", zap.Int("size", payloadSize), zap.Int("max", j.MaxPayloadSize))
+		return caddyhttp.Error(http.StatusRequestEntityTooLarge, fmt.Errorf("payload size exceeds maximum allowed size of %d bytes", j.MaxPayloadSize))
 	}
 
-	j.logger.Info("Recorded Payload size", zap.Int("size", payloadSize))
+	// TODO
+	// 1. Determine tenant via JWT claim
+	// 2. Store payload size in a database
 
 	// Proceed to the next handler
 	return next.ServeHTTP(w, r)
+}
+
+// parseCaddyfile will unmarshal tokens from h into a new Middleware.
+func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+	m := &PayloadSize{}
+	err := m.UnmarshalCaddyfile(h.Dispenser)
+	return m, err
 }
 
 var (
 	_ caddy.Module                = (*PayloadSize)(nil)
 	_ caddyhttp.MiddlewareHandler = (*PayloadSize)(nil)
 	_ caddy.Provisioner           = (*PayloadSize)(nil)
-	//_ caddyfile.Unmarshaler       = (*JWTPayload)(nil)
+	_ caddyfile.Unmarshaler       = (*PayloadSize)(nil)
+	_ caddy.Validator             = (*PayloadSize)(nil)
 )
