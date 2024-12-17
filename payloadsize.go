@@ -53,6 +53,7 @@ func (j *PayloadSize) Validate() error {
 
 func (j *PayloadSize) Provision(context caddy.Context) error {
 	j.logger = context.Logger()
+	j.logger.Info("provisioned payloadize middleware")
 	return nil
 }
 
