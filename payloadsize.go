@@ -75,7 +75,13 @@ func (j *PayloadSize) ServeHTTP(w http.ResponseWriter, r *http.Request, next cad
 	if err != nil {
 		return caddyhttp.Error(http.StatusBadRequest, fmt.Errorf("invalid content length: %v", err))
 	}
-	j.logger.Info("recorded payload size", zap.Int("size", contentLength), zap.String("tenant", "unknown"))
+	// Path detection
+	path := r.URL.Path
+
+	j.logger.Info("recorded payload size",
+		zap.Int("size", contentLength),
+		zap.String("tenant", "unknown"),
+		zap.String("path", path))
 
 	// TODO
 	// 1. Determine tenant via JWT claim
