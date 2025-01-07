@@ -7,7 +7,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
-	"io"
 	"net/http"
 	"strconv"
 )
@@ -67,21 +66,16 @@ func (j *PayloadSize) CaddyModule() caddy.ModuleInfo {
 
 func (j *PayloadSize) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 
-	// Read the body (plaintext payload)
-	body, err := io.ReadAll(r.Body)
-
+	// Read content length from the request header
+	cl := r.Header.Get("Content-Length")
+	if cl == "" { // If no CL then skip
+		return next.ServeHTTP(w, r)
+	}
+	contentLength, err := strconv.Atoi(cl)
 	if err != nil {
-		return caddyhttp.Error(http.StatusBadRequest, fmt.Errorf("failed to read request body: %v", err))
+		return caddyhttp.Error(http.StatusBadRequest, fmt.Errorf("invalid content length: %v", err))
 	}
-
-	payloadSize := len(body)
-	j.logger.Info("recorded payload size", zap.Int("size", payloadSize), zap.String("tenant", "unknown"))
-
-	// Enforce max payload size if specified
-	if j.MaxPayloadSize > 0 && payloadSize > j.MaxPayloadSize {
-		j.logger.Error("payload size exceeds maximum allowed size", zap.Int("size", payloadSize), zap.Int("max", j.MaxPayloadSize))
-		return caddyhttp.Error(http.StatusRequestEntityTooLarge, fmt.Errorf("payload size exceeds maximum allowed size of %d bytes", j.MaxPayloadSize))
-	}
+	j.logger.Info("recorded payload size", zap.Int("size", contentLength), zap.String("tenant", "unknown"))
 
 	// TODO
 	// 1. Determine tenant via JWT claim
